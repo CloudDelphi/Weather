@@ -1,0 +1,74 @@
+object InfoTextForm: TInfoTextForm
+  Left = 363
+  Top = 236
+  BorderIcons = []
+  BorderStyle = bsNone
+  Caption = 'InfoTextForm'
+  ClientHeight = 204
+  ClientWidth = 209
+  Color = clBtnFace
+  Font.Charset = TURKISH_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  Font.Style = []
+  OldCreateOrder = False
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnDeactivate = FormDeactivate
+  OnMouseDown = FormMouseDown
+  PixelsPerInch = 96
+  TextHeight = 13
+  object BackgrndLbl: TLabel
+    Left = 8
+    Top = 8
+    Width = 195
+    Height = 186
+    AutoSize = False
+    Caption = 'BackgrndLbl'
+    Color = clOlive
+    Enabled = False
+    ParentColor = False
+  end
+  object InfoTextLbl: TLabel
+    Left = 20
+    Top = 48
+    Width = 172
+    Height = 137
+    AutoSize = False
+    Caption = 'InfoTextLbl'
+    Enabled = False
+    Font.Charset = TURKISH_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'Tahoma'
+    Font.Style = []
+    ParentFont = False
+  end
+  object HeaderTextLbl: TLabel
+    Left = 24
+    Top = 17
+    Width = 109
+    Height = 22
+    Caption = 'HeaderTextLbl'
+    Enabled = False
+    Font.Charset = ANSI_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -16
+    Font.Name = 'Trebuchet MS'
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object CloseBtn: TButton
+    Left = 175
+    Top = 15
+    Width = 18
+    Height = 18
+    Cursor = crHandPoint
+    Hint = 'Kapat'
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 0
+    OnClick = CloseBtnClick
+  end
+end
