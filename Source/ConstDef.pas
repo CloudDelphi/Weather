@@ -12,6 +12,8 @@
 {       Update  : 24.01.2014                            }
 {       Update  : 22.12.2014                            }
 {       Update  : 25.11.2015                            }
+{       Update  : 14.05.2016                            }
+{       Update  : 25.03.2019                            }
 {                                                       }
 {*******************************************************}
 
@@ -25,19 +27,22 @@ const
   SC_DRAGMOVE = $F012;
 
 const
-  sCurrVersion    = '2.00';
+  sCurrVersion    = '2.80';
   sUpdateMessage  = 'Hava Cýva! nýn %s sürümü çýkmýþ! Ýndirmek ister misiniz?';
   sBalloonHintMsg = 'Hava Cýva! çalýþýyor! Hemen bulunduðunuz ili seçin ve'#13#10 +
                     'tam beþ günlük Hava durumunu öðrenin. Bunun için ana ' +
                     'pencerede farenin sað tuþuna basmanýz yeterli. Hem dahasý da var...';
-
+                    
 const
-  SearchURL      = 'http://xoap.weather.com/search/search'; //?where= + City';
-  //ForecastURL    = 'http://xml.weather.yahoo.com/forecastrss/'; // + LocationID + "_" & UnitValue + ".xml"';
-  //ForecastURL    = 'http://xml.weather.yahoo.com/forecastrss'; { v1.50 }
-  ForecastURL    = 'http://yahoowidget.weather.com/weather/local/'; { v1.80 }
-  MyHomePage     = 'http://www.shenturk.com/';
+  SearchURL     = 'http://weather.service.msn.com/find.aspx?outputview=search&src=vista&weasearchstr=%s&weadegreetype=C&culture=tr-TR'; { v3.00 }
+  ForecastURL   = 'http://weather.service.msn.com/data.aspx?src=vista&wealocations=%s&weadegreetype=%s&culture=%s'; { v3.00 }
   // http://xml.weather.yahoo.com/forecastrss?p=TUXX0014&u=c
+  //SearchURL   = 'http://xoap.weather.com/search/search'; //?where= + City';
+  //ForecastURL = 'http://xml.weather.yahoo.com/forecastrss/'; // + LocationID + "_" & UnitValue + ".xml"';
+  //ForecastURL = 'http://xml.weather.yahoo.com/forecastrss'; { v1.50 }
+  //ForecastURL = 'http://yahoowidget.weather.com/weather/local/'; { v1.80 }
+  //ForecastURL = 'http://iphone-wu.apple.com/dgw?imei=%s&apptype=weather&t=%d'; { v2.50 }
+  MyHomePage    = 'http://www.shenturk.com/';
 
 var
   { v1.50 }
@@ -47,6 +52,7 @@ var
   AppGuid: TGUID;
   AppGuidStr: string;
   DefaultGuid: TGUID = '{705F4B2D-91E4-43EC-AAF7-B596DFF4DFB5}';
+  Transaction: Integer = 0;
 
 const
   OpacityStep  = 18;
@@ -66,13 +72,14 @@ type
 
 type
   TBackgroundStyle  = (bsNone, bsTinyGlass, bsDarkGlass, bsCoffeeMilk, bsColorized);
-  TConnectionStatus = (csConnected, csConnecting, csNotConnected, csException);
+  TConnectionStatus = (csConnected, csConnecting, csSearching, csNotConnected, csException);
 
 const
   sShellLinkName    = '\Hava Cýva!.lnk';
 
   sConnected        = 'Baðlantý kuruldu';
   sConnecting       = 'Baðlantý kuruluyor...';
+  sSearching        = 'Araþtýrýlýyor...';
   sNotConnected     = 'Baðlantý yok';
   sException        = 'Hata: Ýstisnai durum oluþtu.';
 
@@ -92,6 +99,7 @@ const
   sTop              = 'Top';
   sCityName         = 'CityName';
   sCityID           = 'CityID';
+  sCityFullName     = 'CityFullName';
   sBackground       = 'Background';
   sBackColor        = 'BackColor';
   sGlassEffect      = 'GlassEffect';
@@ -123,6 +131,9 @@ const
   sMainViewStyle    = 'ViewStyle';
   sHibernateAlert   = 'HibernateAlert';
   sHibernate        = 'Hibernate';
+  { 2.50 }
+  sAppGuid          = 'GUID';
+  sAntialias        = 'Antialias';
 
 const
   MaxForecast = 5;
@@ -143,17 +154,17 @@ const
   MaxWeatherIcons = 50;
 
   WeatherIcons: array[0..MaxWeatherIcons - 1] of TWeatherIcons = (
-    (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök gürültülü'),
+    (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök gürültülü'), // 0
     (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök Gürültülü'),
     (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök Gürültülü'),
     (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök Gürültülü'),
     (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök Gürültülü'),
-    (Weather: 'Hail'; SoM: False; Turkish: 'Dolu'),
-    (Weather: 'Hail'; SoM: False; Turkish: 'Dolu'),
+    (Weather: 'Snowy Rain'; SoM: False; Turkish: 'Dolu'), // Hail
+    (Weather: 'Showers'; SoM: False; Turkish: 'Dolu'), //Hail
     (Weather: 'Hail'; SoM: False; Turkish: 'Dolu'),
     (Weather: 'Showers'; SoM: False; Turkish: 'Yaðýþlý'),
     (Weather: 'Showers'; SoM: False; Turkish: 'Yaðýþlý'),
-    (Weather: 'Rain'; SoM: False; Turkish: 'Yaðmurlu'),
+    (Weather: 'Rain'; SoM: False; Turkish: 'Yaðmurlu'),               // 10
     (Weather: 'Showers'; SoM: False; Turkish: 'Yaðýþlý'),
     (Weather: 'Rain'; SoM: False; Turkish: 'Yaðmurlu'),
     (Weather: 'Flurries'; SoM: False; Turkish: 'Sert Rüzgarlý'),
@@ -162,8 +173,8 @@ const
     (Weather: 'Snow'; SoM: False; Turkish: 'Kar Yaðýþlý'),
     (Weather: 'Thunderstorms'; SoM: False; Turkish: 'Gök Gürültülü'),
     (Weather: 'Hail'; SoM: False; Turkish: 'Don'),
-    (Weather: 'Haze'; SoM: True; Turkish: 'Hafif Sisli'),
-    (Weather: 'Fog'; SoM: False; Turkish: 'Sisli'),
+    (Weather: 'Haze'; SoM: False; Turkish: 'Hafif Sisli'),
+    (Weather: 'Fog'; SoM: False; Turkish: 'Sisli'),                   // 20
     (Weather: 'Haze'; SoM: True; Turkish: 'Hafif Sisli'),
     (Weather: 'Haze'; SoM: True; Turkish: 'Hafif Sisli'),
     (Weather: 'Wind'; SoM: False; Turkish: 'Rüzgarlý'),
@@ -173,7 +184,7 @@ const
     (Weather: 'Many Clouds'; SoM: True; Turkish: 'Çok Bulutlu'),
     (Weather: 'Many Clouds'; SoM: True; Turkish: 'Çok Bulutlu'),
     (Weather: 'Clouds'; SoM: True; Turkish: 'Parçalý Bulutlu'),
-    (Weather: 'Clouds'; SoM: True; Turkish: 'Parçalý Bulutlu'),
+    (Weather: 'Clouds'; SoM: True; Turkish: 'Parçalý Bulutlu'),       // 30
     (Weather: 'None'; SoM: True; Turkish: 'Açýk'),
     (Weather: 'None'; SoM: True; Turkish: 'Açýk'),
     (Weather: 'Few Clouds'; SoM: True; Turkish: 'Az Bulutlu'),
@@ -183,7 +194,7 @@ const
     (Weather: 'Thunderstorms'; SoM: True; Turkish: 'Gök Gürültülü'),
     (Weather: 'Thunderstorms'; SoM: True; Turkish: 'Gök Gürültülü'),
     (Weather: 'Showers'; SoM: True; Turkish: 'Yaðýþlý'),
-    (Weather: 'Rain'; SoM: False; Turkish: 'Yaðmurlu'),
+    (Weather: 'Rain'; SoM: False; Turkish: 'Yaðmurlu'),               // 40
     (Weather: 'Snow'; SoM: False; Turkish: 'Kar Yaðýþlý'),
     (Weather: 'Snow'; SoM: False; Turkish: 'Kar Yaðýþlý'),
     (Weather: 'Snow'; SoM: False; Turkish: 'Kar Yaðýþlý'),
@@ -192,7 +203,7 @@ const
     (Weather: 'Snow'; SoM: False; Turkish: 'Kar Yaðýþlý'),
     (Weather: 'Thunderstorms'; SoM: True; Turkish: 'Gök Gürültülü'),
     (Weather: 'Rain'; SoM: True; Turkish: 'Yaðmurlu'),
-    (Weather: 'None'; SoM: True; Turkish: 'Bilinmiyor')
+    (Weather: 'None'; SoM: True; Turkish: 'Bilinmiyor')               // 49
   );
 
   MaxTinyWeatherIcons = 50;
@@ -202,8 +213,8 @@ const
 			'Thunderstorms',		//  2 : Thunderstorms
 			'Thunderstorms',		//  3 : Thunderstorms
 			'Thunderstorms',		//  4 : Thunderstorms
-			'Hail',					//  5 : Icy Snowy Rain ***
-			'Hail',					//  6 : Sleet & Rain ***
+			'Snowy Rain',					//  5 : Icy Snowy Rain *** // Hail
+			'Showers',					//  6 : Sleet & Rain *** // Hail
 			'Hail',					//  7 : Icy Snowy Rain (hail/rain/snow) ***
 			'Showers',				//  8 : Icy Drizzle ***
 			'Showers',				//  9 : Drizzle
@@ -277,8 +288,6 @@ function EnglishDayToTurkishDay(const DayName: WideString): WideString;
 { NextEnglishDay }
 function NextEnglishDay(const DayName: WideString): WideString;
 
-implementation
-
 const
   MaxDays = 7;
   ShortTurkishDays: array[1..MaxDays] of WideString =
@@ -287,15 +296,21 @@ const
     ('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat');
   LongEnglishDays: array[1..7] of string =
     ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday');
-    
+
+implementation
+
 { EnglishDayToTurkishDay }
 function EnglishDayToTurkishDay(const DayName: WideString): WideString;
 var
   I: Integer;
 begin
+  Result := '';
   for I := 1 to MaxDays do
-    if SameText(DayName, LongEnglishDays[I]) then Break;
-  Result := ShortTurkishDays[I];
+    if SameText(DayName, LongEnglishDays[I]) then
+    begin
+      Result := ShortTurkishDays[I];
+      Break;
+    end;
 end;
 
 { NextEnglishDay }

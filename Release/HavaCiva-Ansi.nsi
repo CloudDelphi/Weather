@@ -4,7 +4,7 @@
 !define PRODUCT_NAME 				"HavaCiva"
 !define PRODUCT_ENGLISH_NAME 		"HavaCiva"
 !define PRODUCT_DELPHI_NAME 		"HavaCiva"
-!define PRODUCT_VERSION 			"2.00"
+!define PRODUCT_VERSION 			"2.80"
 !define PRODUCT_DISPLAY_NAME 		"Hava Cýva!"
 !define PRODUCT_FOLDER_NAME 		"Hava Civa"
 !define PRODUCT_LINK_NAME 			"Hava Cýva!"

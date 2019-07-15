@@ -401,6 +401,9 @@ object HavaCivaMainForm: THavaCivaMainForm
     object HibernateAction1: TMenuItem
       Action = HibernateAction
     end
+    object KeskinYaziBicimi1: TMenuItem
+      Action = AntialiasAction
+    end
     object N2: TMenuItem
       Caption = '-'
     end
@@ -473,6 +476,10 @@ object HavaCivaMainForm: THavaCivaMainForm
     object HibernateAction: TAction
       Caption = 'K'#305#351' Uykusu'
       OnExecute = HibernateActionExecute
+    end
+    object AntialiasAction: TAction
+      Caption = 'Keskin Yaz'#305' Bi'#231'imi'
+      OnExecute = AntialiasActionExecute
     end
   end
   object MouseTimer: TTimer

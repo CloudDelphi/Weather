@@ -542,13 +542,13 @@ begin
   begin
     if WideText <> '' then
     begin
-      GdiPlusMeasureString(DrawCanvas, WideText, BR, ALabel.Font, Align);
+      GdiPlusMeasureString(DrawCanvas, WideText, BR, ALabel.Font, Align, HavaCivaMainForm.Antialias);
       if ALabel.AutoSize then
         ALabel.ClientWidth := Round(BR.Width) + 1;
       ALabel.ClientHeight := Round(BR.Height) + 1;
       R := MakeRectF(ALabel.BoundsRect);
       OffsetRectF(R, -1.0, -1.0);
-      GdiPlusDrawText(DrawCanvas, WideText, R, ALabel.Font, Align, Color);
+      GdiPlusDrawText(DrawCanvas, WideText, R, ALabel.Font, Align, Color, HavaCivaMainForm.Antialias);
     end;
   end;
 end;

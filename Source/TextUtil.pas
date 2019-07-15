@@ -22,16 +22,17 @@ uses Windows, Messages, CommCtrl, WinSock, Types, SysUtils, GdipApi, GdipObj,
 procedure GdiPlusDrawText(gpCanvas: TGPGraphics; const Caption: WideString;
   Left, Top: Single; const FontName: WideString; gpFontStyle: FontStyle = FontStyleRegular;
   gpAlignment: StringAlignment = StringAlignmentNear; Size: Integer = 10;
-  gpColor: TGPColor = aclBlack); overload;
+  gpColor: TGPColor = aclBlack; Antialis: Boolean = True); overload;
 
 { GdiPlusDrawText }
 procedure GdiPlusDrawText(gpCanvas: TGPGraphics; const Caption: WideString;
   gpRect: TGPRectF; Font: TFont; gpAlignment: StringAlignment = StringAlignmentNear;
-  gpColor: TGPColor = aclBlack; Shadow: Boolean = True); overload;
+  gpColor: TGPColor = aclBlack; Antialis: Boolean = True; Shadow: Boolean = True); overload;
 
 { GdiPlusMeasureString }
 procedure GdiPlusMeasureString(gpCanvas: TGPGraphics; const Caption: WideString;
-  out outRect: TGPRectF; Font: TFont; gpAlignment: StringAlignment = StringAlignmentNear);
+  out outRect: TGPRectF; Font: TFont; gpAlignment: StringAlignment = StringAlignmentNear;
+  Antialis: Boolean = True);
 
 { MakeRectF }
 function MakeRectF(const Rect: TRect): TGPRectF;
@@ -45,18 +46,22 @@ procedure InflateRectF(var RectF: TGPRectF; dx, dy: Single);
 { CopyRectF }
 function CopyRectF(const Rect: TGPRectF): TGPRectF;
 
+var
+  gpTextRenderingHint: TextRenderingHint = TextRenderingHintAntiAlias;
+
 implementation
 
 { GdiPlusDrawText }
 procedure GdiPlusDrawText(gpCanvas: TGPGraphics; const Caption: WideString;
-  Left, Top: Single; const FontName: WideString; gpFontStyle: FontStyle = FontStyleRegular;
+  Left, Top: Single; const FontName: WideString;  gpFontStyle: FontStyle = FontStyleRegular;
   gpAlignment: StringAlignment = StringAlignmentNear; Size: Integer = 10;
-  gpColor: TGPColor = aclBlack); overload;
+  gpColor: TGPColor = aclBlack; Antialis: Boolean = True); overload;
 var
   gpBrush: TGPSolidBrush;
   gpFont: TGPFont;
   gpFormat: TGPStringFormat;
   gpPoint: TGPPointF;
+  gpTextRenderingHint: TextRenderingHint;
 begin
   gpBrush := TGPSolidBrush.Create( gpColor );
   try
@@ -66,7 +71,9 @@ begin
       gpFormat := TGPStringFormat.Create;
       try
 
-        gpCanvas.SetTextRenderingHint(TextRenderingHintAntiAlias);
+        if Antialis then gpTextRenderingHint := TextRenderingHintAntiAlias
+        else gpTextRenderingHint := TextRenderingHintAntiAliasGridFit;
+        gpCanvas.SetTextRenderingHint(gpTextRenderingHint);
         gpFormat.SetAlignment(gpAlignment);
 
         gpPoint.X := Left;
@@ -89,13 +96,15 @@ end;
 { GdiPlusDrawText }
 procedure GdiPlusDrawText(gpCanvas: TGPGraphics; const Caption: WideString;
   gpRect: TGPRectF; Font: TFont; gpAlignment: StringAlignment = StringAlignmentNear;
-  gpColor: TGPColor = aclBlack; Shadow: Boolean = True); overload;
+  gpColor: TGPColor = aclBlack; Antialis: Boolean = True;
+  Shadow: Boolean = True); overload;
 var
   DC: HDC;
   gpBrush: TGPSolidBrush;
   gpFont: TGPFont;
   gpFormat: TGPStringFormat;
   R: TGPRectF;
+  gpTextRenderingHint: TextRenderingHint;
 begin
   DC := GetDC(GetDesktopWindow());
   try
@@ -107,7 +116,11 @@ begin
 
         gpFormat := TGPStringFormat.Create;
         try
-          gpCanvas.SetTextRenderingHint(TextRenderingHintAntiAlias);
+
+          if Antialis then gpTextRenderingHint := TextRenderingHintAntiAlias
+          else gpTextRenderingHint := TextRenderingHintAntiAliasGridFit;
+
+          gpCanvas.SetTextRenderingHint(gpTextRenderingHint);
           gpFormat.SetAlignment(gpAlignment);
 
           if Shadow then
@@ -140,12 +153,14 @@ end;
 
 { GdiPlusMeasureString }
 procedure GdiPlusMeasureString(gpCanvas: TGPGraphics; const Caption: WideString;
-  out outRect: TGPRectF; Font: TFont; gpAlignment: StringAlignment = StringAlignmentNear);
+  out outRect: TGPRectF; Font: TFont; gpAlignment: StringAlignment = StringAlignmentNear;
+  Antialis: Boolean = True);
 var
   DC: HDC;
   gpFont: TGPFont;
   gpFormat: TGPStringFormat;
   gpPoint: TGPPointF;
+  gpTextRenderingHint: TextRenderingHint;
 begin
   DC := GetDC(GetDesktopWindow());
   try
@@ -157,7 +172,9 @@ begin
       try
         gpPoint.X := 0.0;
         gpPoint.Y := 0.0;
-        gpCanvas.SetTextRenderingHint(TextRenderingHintAntiAlias);
+        if Antialis then gpTextRenderingHint := TextRenderingHintAntiAlias
+        else gpTextRenderingHint := TextRenderingHintAntiAliasGridFit;
+        gpCanvas.SetTextRenderingHint(gpTextRenderingHint);
         gpFormat.SetAlignment(gpAlignment);
         gpCanvas.MeasureString( WideString(Caption), Length(Caption), gpFont,
           gpPoint, gpFormat, outRect );

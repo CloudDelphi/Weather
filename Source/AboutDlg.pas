@@ -11,6 +11,7 @@
 {       Update  : 25.05.2013                            }
 {       Update  : 24.01.2014                            }
 {       Update  : 25.11.2015                            }
+{       Update  : 14.05.2016                            }
 {                                                       }
 {*******************************************************}
 
@@ -301,7 +302,7 @@ begin
     if WideText <> '' then
     begin
       GdiPlusMeasureString(DrawCanvas, WideText, oRect, HeaderTextLbl.Font,
-        StringAlignmentCenter);
+        StringAlignmentCenter, HavaCivaMainForm.Antialias);
 
       HeaderTextLbl.ClientWidth := Round(oRect.Width) + 1;
       HeaderTextLbl.ClientHeight := Round(oRect.Height) + 1;
@@ -310,7 +311,7 @@ begin
 
       OffsetRectF(R, -1.0, -1.0);
       GdiPlusDrawText(DrawCanvas, WideText, R, HeaderTextLbl.Font,
-        StringAlignmentCenter, aclWhite);
+        StringAlignmentCenter, aclWhite, HavaCivaMainForm.Antialias);
 
     end;
   end;
@@ -510,7 +511,7 @@ var
 begin
   WideText := 'Hava Cýva!';
   PaintLabel(ProductNameLbl, WideText, StringAlignmentNear, aclWhite);
-  WideText := 'Sürüm ' + sCurrVersion + #13#10'A.Nâsýr Þentürk 2006-2015';
+  WideText := 'Sürüm ' + sCurrVersion + #13#10'A.Nâsýr Þentürk 2006-2019';
   PaintLabel(Label1, WideText, StringAlignmentNear, aclWhite);
   WideText := '"Bundan sonra TV''de hava durumunu'#13#10'kaçýrmak serbest!" - Tuðçe';
   PaintLabel(Label4, WideText, StringAlignmentNear, aclWhite);
@@ -522,8 +523,8 @@ begin
   PaintLabel(Label4, WideText, StringAlignmentNear, aclWhite);
   }
   WideText := 'Hava Cýva! "Açýk Kaynak Kodu" projesi çerçevesinde eðitim'#13#10 +
-    'amacýyla üretilmiþtir. Hava durumu bilgileri Yahoo! Weather '#13#10 +
-    'servisinden alýnmaktadýr. Bu programda kullanýlan resim dosyalarý'#13#10 +
+    'amacýyla üretilmiþtir. Hava durumu bilgileri Foreca servisinden'#13#10 +
+    'alýnmaktadýr. Bu programda kullanýlan resim dosyalarý'#13#10 +
     'Yahoo! Inc.''e aittir. Ekran dizayný Arlo Rose'' dan esinlenerek'#13#10 +
     'tasarlanmýþtýr.';
   PaintLabel(Label3, WideText, StringAlignmentNear, aclWhite);
@@ -544,7 +545,7 @@ begin
       ALabel.ClientHeight := Round(BR.Height) + 1;
       R := MakeRectF(ALabel.BoundsRect);
       OffsetRectF(R, -1.0, -1.0);
-      GdiPlusDrawText(DrawCanvas, WideText, R, ALabel.Font, Align, Color);
+      GdiPlusDrawText(DrawCanvas, WideText, R, ALabel.Font, Align, Color, HavaCivaMainForm.Antialias);
     end;
   end;
 end;

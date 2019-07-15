@@ -12,6 +12,8 @@
 {       Update  : 24.01.2014                            }
 {       Update  : 22.12.2014                            }
 {       Update  : 25.11.2015                            }
+{       Update  : 14.05.2016                            }
+{       Update  : 25.03.2019                            }
 {                                                       }
 {*******************************************************}
 
@@ -23,7 +25,7 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, GdipApi, GdipObj, DirectDraw, StdCtrls, ExtCtrls, Internet, TextUtil,
   ConstDef, VarDates, TrayUtil, Menus, IniFiles, WinInet, XPMan, SyncObjs,
-  InfoWind, ActnList, DateUtils, AboutDlg;
+  InfoWind, ActnList, DateUtils, AboutDlg, msxml;
 
 const
   WM_WEATHERDONE   = WM_USER + 10;
@@ -37,8 +39,7 @@ const
   CM_RESTOREAPP    = CM_JADELAXBASE + 1;
   CM_EXITAPP       = CM_JADELAXBASE + 2;
   CM_RESTARTAPP    = CM_JADELAXBASE + 3;
-
-  CM_BASE        = CM_JADELAXBASE + 100;
+  CM_BASE          = CM_JADELAXBASE + 100;
 
 type
   THavaCivaMainForm = class(TForm)
@@ -112,6 +113,8 @@ type
     Byk1: TMenuItem;
     N11: TMenuItem;
     KUykusu1: TMenuItem;
+    KeskinYaziBicimi1: TMenuItem;
+    AntialiasAction: TAction;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton;
@@ -135,18 +138,14 @@ type
     procedure MaxiActionExecute(Sender: TObject);
     procedure HibernateActionExecute(Sender: TObject);
     procedure MouseTimerTimer(Sender: TObject);
+    procedure AntialiasActionExecute(Sender: TObject);
   private
     { Private declarations }
     Updating: Boolean;
     Moving: Boolean;
     Opacity: Byte;
-
     MainBuffer: TGPBitmap;
     DrawCanvas: TGPGraphics;
-    {
-    ButtonsBuffer: TGPBitmap;
-    ButtonsCanvas: TGPGraphics;
-    }
     OptionsImage,
     CloseImage,
     HideImage,
@@ -161,84 +160,51 @@ type
     SunImage,
     NoneImage: TGPBitmap;
     GridImage: TGPBitmap;
-
     DayState: TDayState;
-
-    LastBuildDateStr: string;
-
     LocCityStr: string;
-    LocRegionStr: string;
     LocCountryStr: string;
-    {
-    UnitTemperatureStr: string;
-    UnitDistanceStr: string;
-    UnitPressureStr: string;
-    UnitSpeedStr: string;
-    }
     CityID: string;
-
     SunriseStr: string;
     SunsetStr: string;
     LatitudeStr: string;
     LongitudeStr: string;
-    TimeZoneStr: string;
     LocalTimeStr: string;
-
+    TimeZoneStr: string;
     WindChillStr: string;
     WindDirectionStr: string;
     WindSpeedStr: string;
-
     HumidityStr: string;
     VisibilityStr: string;
     PressureStr: string;
-    RisingStr: string;
-
-    PubDateStr: string;
-
     CondTextStr: string;
     CondCodeStr: string;
     CondTempStr: string;
-    CondDateStr: string;
-
     ForecastDays : array[0..MaxForecast - 1] of string;
     ForecastLows : array[0..MaxForecast - 1] of string;
     ForecastHighs: array[0..MaxForecast - 1] of string;
     ForecastCodes: array[0..MaxForecast - 1] of string;
     ForecastDates: array[0..MaxForecast - 1] of string;
     ForecastTexts: array[0..MaxForecast - 1] of string;
-
     DateStr: WideString;
     HijriDateStr: WideString;
-
     UnitValue: string;
     TrayIcon: TTrayIcon;
-
     AutoUpdate: Boolean;
     UpdatePeriod: Cardinal;
     ShowTrayIcon: Boolean;
-
-    FormCreated: Boolean;
-
     IsStarted: Boolean;
-
     BackScale: Single;
-
     Favorites: TStringList;
-
     CheckVerThread: TInternetThread;
     CheckVerXML: WideString;
     VersionStr: string;
-
     WeatherXML: WideString;
     WeatherThread: TInternetThread;
-
+    SearchThread: TInternetThread;
+    SearchCityStr: string;
     TrackerThread: TInternetThread;
-
     Distance: TPoint;
-
     AboutForm: TAboutForm;
-
-    IsDateShift: Boolean;
     { v 1.50 }
     MainViewStyle: TMainViewStyle;
     function GetBackScale: Double;
@@ -274,7 +240,8 @@ type
     EnableFadeEffect,
     ShowInfoText,
     StayOnTop,
-    FirstUsage: Boolean;
+    FirstUsage,
+    Antialias: Boolean;
     InfoTextForm: TInfoTextForm; { v1.50 }
     InfoText: WideString;
     InfoTextHeight: Integer;
@@ -290,10 +257,9 @@ type
     procedure DoActivate(Sender: TObject);
     procedure DoDeactivate(Sender: TObject);
     procedure InternetUpdate;
+    procedure BeginCityWeather;
     procedure ParseWeatherXML;
-    procedure ParseWeatherXML180;
     procedure ParseCheckVerXML;
-    procedure ParseDocumentDateTime;
     procedure PaintBackground;
     procedure PaintButtons;
     procedure PaintSunOrMoon;
@@ -304,7 +270,6 @@ type
     procedure PaintWeatherBig;
     procedure PaintCityName;
     procedure PaintTemperature;
-    procedure PaintInfoText;
     procedure PaintGridImage;
     procedure PaintForecasts;
     procedure PaintForecastsDay(Index: Integer);
@@ -343,13 +308,6 @@ type
     procedure ResetData;
     procedure UpdateActionsState;
     procedure ShowOptionsDialog(const PageIndex: Integer);
-    procedure DrawImageTo(Graphics: TGPGraphics; X, Y, W, H: Single;
-      Image: TGPBitmap; Alpha: Byte = $FF);
-    function UTCTimeToSystemTime(const UTCTime: string;
-      var SystemTime: TSystemTime): Boolean;
-    function DocTimeToSystemTime(const DocTime: string;
-      var SystemTime: TSystemTime): Boolean;
-    function GetDocumentTimeText: string;
     procedure UpdateFormStyle;
     { v1.50 }
     procedure UpdateMainViewStyle;
@@ -389,15 +347,6 @@ begin
 
   Randomize;
 
-  { v2.00 }
-  if CreateGUID(AppGuid) <> 0 then { Error? }
-    AppGuid := DefaultGuid;
-  AppGuidStr := GUIDToString(AppGuid);
-  if Pos('{', AppGuidStr) = 1 then
-    Delete(AppGuidStr, 1, 1);
-  if Pos('{', AppGuidStr) = Length(AppGuidStr) then
-    Delete(AppGuidStr, Length(AppGuidStr), 1);
-
   Application.HintHidePause := 15000;
 
   AllocateHandle; { v1.50 }
@@ -418,12 +367,11 @@ begin
     SORT_DEFAULT),
     EnglishFS);
 
-  FormCreated := False;
-
   BackScale := 1.25;
   MainViewStyle := mvsMini;
 
   GridLbl.Visible := False;
+  MoonLbl.Visible := False;
 
   Application.ShowHint := True;
   Application.OnShowHint := DoShowHint;
@@ -472,7 +420,7 @@ begin
 
   UpdateMainViewMenuChecks;
 
-  UnitValue := 'c';
+  UnitValue := 'C';
 
   if EnableFadeEffect then Opacity := OpacityMin
   else Opacity := OpacityMax;
@@ -487,8 +435,6 @@ begin
   CheckTimer.Interval := UpdatePeriod;
 
   LoadedTimer.Enabled := True;
-
-  FormCreated := True;
 
   Favorites := TStringList.Create;
 
@@ -508,10 +454,6 @@ procedure THavaCivaMainForm.UpdateLayered;
 begin
   Updating := True;
   try
-    {
-    ReleaseHandle;
-    AllocateHandle;
-    }
     ClearBuffer;
     UpdateActionsState;
     PrepareInfoText;
@@ -522,11 +464,8 @@ begin
     PaintCityName;
     PaintSunOrMoon;
     PaintWeatherBig;
-    //PaintInfoText;
     PaintButtons;
-
     UpdateMainWindow;
-
   finally
     Updating := False;
   end;
@@ -549,6 +488,7 @@ begin
   BaseImage.Free;
   TrackerThread.Free;
   CheckVerThread.Free;
+  SearchThread.Free;
   WeatherThread.Free;
   GridImage.Free;
   OptionsImage.Free;
@@ -632,8 +572,7 @@ end;
 
 procedure THavaCivaMainForm.DoActivate(Sender: TObject);
 begin
-  //IsActive := True;
-  //UpdateLayered;
+
 end;
 
 procedure THavaCivaMainForm.DoDeactivate(Sender: TObject);
@@ -644,25 +583,7 @@ end;
 
 procedure THavaCivaMainForm.InternetUpdate;
 begin
-
-  if Assigned(WeatherThread) then begin
-    if not WeatherThread.Terminated then Exit;
-  end;
-
-  ConnectionStatus := csConnecting;
-  UpdateLayered;
-  if Assigned(WeatherThread) then FreeAndNil(WeatherThread);
-
-  { v1.80 }
-  WeatherThread := TInternetThread.Create(Self.Handle, WM_WEATHERDONE);
-  with WeatherThread do
-  begin
-    Request.Open('GET', ForecastURL + CityID + '?cc=*&dayf=5&ut=' + UnitValue +
-      '&ud=k&us=k&up=m&ur=m&prod=bd_select&par=yahoowidgetxml');
-    Request.UserAgent := 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US)';
-    Resume;
-  end;
-  
+  BeginCityWeather;
 end;
 
 procedure THavaCivaMainForm.PaintBackground;
@@ -727,7 +648,6 @@ var
     Attr: TGPImageAttributes;
     Matrix: ColorMatrix;
     ScaledHeight: Cardinal;
-    Brush: TGPSolidBrush;
   begin
 
     Matrix := CMatrix;
@@ -744,13 +664,6 @@ var
 
       X := BackgrndLbl.Left;
       Y := BackgrndLbl.Top;
-
-      Brush := TGPSolidBrush.Create(aclRed);
-      try
-        //DrawCanvas.FillRectangle(Brush, MakeRect(0, 0, Self.Width, Self.Height));
-      finally
-        Brush.Free;
-      end;
 
       Image := TopImage;
 
@@ -825,26 +738,30 @@ var
   MoonPhase: Integer;
   WeatherCodeInt: Integer;
   FetchedTime: TDateTime;
+  Latitude, Longitude, TimeZone: Double;
 begin
 
   if WeatherLbl.Visible then
   begin
 
-    Sunrise := StrToTimeDef(SunriseStr, -1, EnglishFS);
-    Sunset  := StrToTimeDef(SunsetStr, -1, EnglishFS);
+    Sunrise := -1;
+    Sunset := -1;
+    Latitude := StrToFloatDef(LatitudeStr, -1, TurkishFS);
+    Longitude := StrToFloatDef(LongitudeStr, -1, TurkishFS);
+    TimeZone := StrToFloatDef(TimeZoneStr, -1, TurkishFS);
+    GetSunriseSunset(Date, Latitude, Longitude, TimeZone, Sunrise, Sunset);
 
     if (Sunrise > -1) and (Sunset > -1) then
     begin
-      FetchedTime := StrToTimeDef(LocalTimeStr, -1, EnglishFS);
-      {
-      if UTCTimeToSystemTime(CondDateStr, SysTime) then
-        FetchedTime := TimeOf(SystemTimeToDateTime(SysTime));
-      }
+      SunriseStr := TimeToStr(Sunrise);
+      SunsetStr := TimeToStr(Sunset);
+      FetchedTime := StrToTimeDef(LocalTimeStr, -1, TurkishFS);
       if (FetchedTime >= Sunrise) and (FetchedTime < Sunset) then
         DayState := dsDayTime
       else
         DayState := dsNightTime;
-    end else DayState := dsNone;
+    end
+      else DayState := dsNone;
 
     MoonPhase := GetMoonPhase;
     if MoonPhase < 0 then MoonPhase := 0;
@@ -866,7 +783,7 @@ begin
       else PaintNone;
     end
     else PaintEarth;
-    
+
   end;
 
 end;
@@ -881,17 +798,12 @@ begin
   if WeatherLbl.Visible then
   begin
     WeatherCodeInt := StrToIntDef(CondCodeStr, -1);
-    //WeatherCodeInt := 6;
     if (WeatherCodeInt >= 0) and (WeatherCodeInt < MaxWeatherIcons) then
       ImageName := '.\Contents\Resources\Big\' + WeatherIcons[WeatherCodeInt].Weather + '.png'
     else ImageName := '.\Contents\Resources\Big\None.png';
 
     Image := TGPBitmap.Create(ImageName);
     try
-      {
-      DrawImageTo(DrawCanvas, WeatherLbl.Left, WeatherLbl.Top,
-        Image.GetWidth, Image.GetHeight, Image, 180);
-      }
       DrawCanvas.DrawImage(Image, WeatherLbl.Left, WeatherLbl.Top,
         Image.GetWidth, Image.GetHeight);
     finally
@@ -914,7 +826,7 @@ begin
     CityNameLbl.Caption := WideText;
 
     GdiPlusMeasureString(DrawCanvas, WideText, oRect, CityNameLbl.Font,
-      StringAlignmentFar);
+      StringAlignmentFar, Antialias);
 
     CityNameLbl.ClientWidth := Round(oRect.Width) + 1;
     CityNameLbl.ClientHeight := Round(oRect.Height) + 1;
@@ -923,7 +835,7 @@ begin
 
     R := MakeRectF(CityNameLbl.BoundsRect);
     GdiPlusDrawText(DrawCanvas, WideText, R, CityNameLbl.Font,
-      StringAlignmentFar, aclWhite);
+      StringAlignmentFar, aclWhite, Antialias);
 
   end;
 end;
@@ -941,10 +853,10 @@ begin
     if WideText <> '' then
     begin
 
-      TemperatureLbl.Caption := WideText;//CondTempStr + #0176;
+      TemperatureLbl.Caption := WideText;
 
       GdiPlusMeasureString(DrawCanvas, WideText, oRect,
-        TemperatureLbl.Font, StringAlignmentFar);
+        TemperatureLbl.Font, StringAlignmentFar, Antialias);
 
       TemperatureLbl.ClientWidth := Round(oRect.Width) + 1;
       TemperatureLbl.ClientHeight := Round(oRect.Height) + 1;
@@ -953,7 +865,7 @@ begin
 
       R := MakeRectF(TemperatureLbl.BoundsRect);
       GdiPlusDrawText(DrawCanvas, WideText, R, TemperatureLbl.Font,
-        StringAlignmentFar, aclWhite);
+        StringAlignmentFar, aclWhite, Antialias);
 
     end;
   end;
@@ -1012,53 +924,20 @@ begin
 
     if ForecastDays[Index] <> '' then
     begin
-
-      if (Index = 0) then
-      begin
-        if ForecastHighs[Index] = 'N/A' then WideText := 'BU GECE'
-        else WideText := 'BUGÜN';
-      end
-      else
-        WideText := EnglishDayToTurkishDay(ForecastDays[Index]);
-
-      (*
-      UTCTimeToSystemTime(CondDateStr, SysTime);
-
-      if Index = 0 then begin
-        if (SysTime.wHour < 2) or (SysTime.wHour > 15) then
-          WideText := 'BU GECE'
-        else WideText := 'BUGÜN';
-      end
-      else if Index = 1 then WideText := 'YARIN'
-      else begin
-        WideText := EnglishDayToTurkishDay(ForecastDays[Index]);
-        { v1.50 }
-        {
-        if IsDateShift then
-          WideText := EnglishDayToTurkishDay(NextEnglishDay(ForecastDays[Index]))
-        else WideText := EnglishDayToTurkishDay(ForecastDays[Index]);
-        }
-      end;
-      *)
-
+      WideText := UpperCase(ForecastDays[Index]);
       GdiPlusMeasureString(DrawCanvas, WideText, oRect, ForecastLabel.Font,
-        StringAlignmentCenter);
+        StringAlignmentCenter, Antialias);
 
       R := MakeRectF(ForecastLabel.BoundsRect);
       R.Y := R.Y - 14;
       GdiPlusDrawText(DrawCanvas, WideText, R, ForecastLabel.Font,
-        StringAlignmentCenter, aclWhite);
+        StringAlignmentCenter, aclWhite, Antialias);
     end;
 
     TempFont := TFont.Create;
     try
-      {
-      TempFont.Assign(ForecastLabel.Font);
-      TempFont.Size := 10;
-      TempFont.Style := [fsBold];
-      }
 
-      TempFont.Name := CityNameLbl.Font.Name;//'Trebuchet MS';//'Arial';
+      TempFont.Name := CityNameLbl.Font.Name;
       TempFont.Size := 10;
       TempFont.Style := [fsBold];
 
@@ -1069,12 +948,12 @@ begin
         else WideText := ForecastHighs[Index] + #0176;
 
         GdiPlusMeasureString(DrawCanvas, WideText, oRect, TempFont,
-          StringAlignmentCenter);
+          StringAlignmentCenter, Antialias);
 
         R := MakeRectF(ForecastLabel.BoundsRect);
         OffsetRectF(R, -14.0, 26.0);
         GdiPlusDrawText(DrawCanvas, WideText, R, TempFont,
-          StringAlignmentCenter, aclWhite);
+          StringAlignmentCenter, aclWhite, Antialias);
 
       end;
 
@@ -1086,12 +965,12 @@ begin
         WideText := ForecastLows[Index] + #0176;
 
         GdiPlusMeasureString(DrawCanvas, WideText, oRect, TempFont,
-          StringAlignmentCenter);
+          StringAlignmentCenter, Antialias);
 
         R := MakeRectF(ForecastLabel.BoundsRect);
         OffsetRectF(R, 14.0, 26.0);
         GdiPlusDrawText(DrawCanvas, WideText, R, TempFont,
-          StringAlignmentCenter, MakeColor(200, 255, 255, 255));
+          StringAlignmentCenter, MakeColor(200, 255, 255, 255), Antialias);
       end;
 
     finally
@@ -1102,7 +981,8 @@ begin
     begin
 
       if not ForecastLabel.ShowHint then ForecastLabel.ShowHint := True;
-      ForecastLabel.Hint := WeatherIcons[StrToIntDef(ForecastCodes[Index], 49)].Turkish;
+      //ForecastLabel.Hint := WeatherIcons[StrToIntDef(ForecastCodes[Index], 49)].Turkish;
+      ForecastLabel.Hint := ForecastTexts[Index];
 
       Image := TGPBitmap.Create('.\Contents\Resources\Tiny\' +
         TinyWeatherIcons[StrToIntDef(ForecastCodes[Index], 0)] + '.png');
@@ -1150,17 +1030,17 @@ begin
       end;
 
       GdiPlusMeasureString(DrawCanvas, WideText, oRect, MoonLbl.Font,
-        StringAlignmentCenter);
+        StringAlignmentCenter, Antialias);
 
       R := MakeRectF(MoonLbl.BoundsRect);
       R.Y := R.Y - 14;
       GdiPlusDrawText(DrawCanvas, WideText, R, MoonLbl.Font,
-        StringAlignmentCenter, aclWhite);
+        StringAlignmentCenter, aclWhite, Antialias);
 
       TempFont := TFont.Create;
       try
 
-        TempFont.Name := CityNameLbl.Font.Name;//'Trebuchet MS';//'Arial';
+        TempFont.Name := CityNameLbl.Font.Name;
         TempFont.Size := 10;
         TempFont.Style := [fsBold];
 
@@ -1169,12 +1049,12 @@ begin
         WideText := '%' + IntToStr(MoonPhase);
 
         GdiPlusMeasureString(DrawCanvas, WideText, oRect, TempFont,
-          StringAlignmentCenter);
+          StringAlignmentCenter, Antialias);
 
         R := MakeRectF(MoonLbl.BoundsRect);
         OffsetRectF(R, 0.0, 26.0);
         GdiPlusDrawText(DrawCanvas, WideText, R, TempFont,
-          StringAlignmentCenter, aclWhite);
+          StringAlignmentCenter, aclWhite, Antialias);
 
       finally
         TempFont.Free;
@@ -1194,13 +1074,14 @@ end;
 procedure THavaCivaMainForm.WMWeatherDone(var Message: TMessage);
 begin
   WeatherXML := WeatherThread.Response.Content;
+  { WeatherThread.Response.ContentStream.SaveToFile('forecast.xml'); }
   if Assigned(WeatherThread) then FreeAndNil(WeatherThread);
-  //Sleep(1000);
   if Message.LParam = 0 then
   begin
     if (not IsStarted) and (EnableFadeEffect) then
     begin
-      while BackScale < GetBackScale do begin
+      while BackScale < GetBackScale do
+      begin
         BackScale := BackScale + 0.25;
         UpdateBackground;
         Sleep(0);
@@ -1210,12 +1091,9 @@ begin
     IsStarted := True;
     ConnectionStatus := csConnected;
     ResetData;
-    {ParseWeatherXML;}
-    ParseWeatherXML180;
-    {ParseDocumentDateTime;}
+    ParseWeatherXML;
     DateStr := GetDateTime;
     HijriDateStr := GetHijriText;
-    //ParseLongDateTime(CondDateStr, FetchedDate, FetchedTime);
   end
   else
     ConnectionStatus := csNotConnected;
@@ -1231,9 +1109,22 @@ end;
 
 procedure THavaCivaMainForm.LoadOptions;
 begin
+  { v2.50 }
+  AppGuidStr := IniFile.ReadString(sGeneral, sAppGuid, '');
+  if AppGuidStr = '' then
+  begin
+    if CreateGUID(AppGuid) <> 0 then { Error? }
+      AppGuid := DefaultGuid;
+    AppGuidStr := GUIDToString(AppGuid);
+    if Pos('{', AppGuidStr) = 1 then
+      Delete(AppGuidStr, 1, 1);
+    if Pos('}', AppGuidStr) = Length(AppGuidStr) then
+      Delete(AppGuidStr, Length(AppGuidStr), 1);
+  end;
   Left := IniFile.ReadInteger(sAppearance, sLeft, 300);
   Top := IniFile.ReadInteger(sAppearance, sTop, 300);
   LocCityStr := IniFile.ReadString(sLocation, sCityName, 'Istanbul');
+  SearchCityStr := IniFile.ReadString(sLocation, sCityFullName, 'Istanbul, Turkey');
   CityID := IniFile.ReadString(sLocation, sCityID, 'TUXX0014');
   BackgroundStyle := TBackgroundStyle(IniFile.ReadInteger(sAppearance, sBackground,
     Ord(bsDarkGlass)));
@@ -1272,11 +1163,14 @@ begin
   ShowInfoText := IniFile.ReadBool(sAppearance, sShowInfoText, True);
 
   FirstUsage := IniFile.ReadBool(sGeneral, sFirstUsage, True);
+  Antialias := IniFile.ReadBool(sAppearance, sAntialias, True);
 
   TemperatureLbl.Font.Name := IniFile.ReadString(sAppearance, sTempFontName, 'Arial');
   CityNameLbl.Font.Name := IniFile.ReadString(sAppearance, sCityFontName, 'Arial');
 
   ShowInfoAction.Checked := ShowInfoText;
+
+  AntialiasAction.Checked := not Antialias;
 
   StayOnTop := IniFile.ReadBool(sGeneral, sAlwaysTop, False);
 
@@ -1303,12 +1197,16 @@ begin
   IniFile.WriteInteger(sAppearance, sLeft, Left);
   IniFile.WriteInteger(sAppearance, sTop, Top);
   IniFile.WriteString(sLocation, sCityName, LocCityStr);
+  IniFile.WriteString(sLocation, sCityFullName, SearchCityStr);
   IniFile.WriteString(sLocation, sCityID, CityID);
   IniFile.WriteInteger(sAppearance, sInfoTextLeft, InfoTextForm.Left);
   IniFile.WriteInteger(sAppearance, sInfoTextTop, InfoTextForm.Top);
   IniFile.WriteBool(sAppearance, sShowInfoText, ShowInfoText);
   IniFile.WriteBool(sAppearance, sHibernate, HibernateAction.Checked);
   if FirstUsage then IniFile.WriteBool(sGeneral, sFirstUsage, False);
+  IniFile.WriteBool(sAppearance, sAntialias, not AntialiasAction.Checked);
+  { v2.50 }
+  IniFile.WriteString(sGeneral, sAppGuid, AppGuidStr);
   IniFile.UpdateFile;
 end;
 
@@ -1316,6 +1214,7 @@ function THavaCivaMainForm.GetConnectionText: WideString;
 begin
   case ConnectionStatus of
     csConnecting   : Result := sConnecting;
+    csSearching    : Result := sSearching;
     csNotConnected : Result := sNotConnected;
     csException    : Result := sException;
   else
@@ -1367,7 +1266,6 @@ begin
     AddWideText(GetPressureText, 'Basýnç: %s'#13#10);
   if ShowDate then
     AddWideText(DateStr, '%s'#13#10);
-    //AddWideText(CondDateStr, '%s'#13#10);
   if ShowHijri then
     AddWideText(HijriDateStr, '%s'#13#10);
 
@@ -1390,14 +1288,10 @@ end;
 
 function THavaCivaMainForm.GetWindText: WideString;
 begin
-  Result := '';
-  if (WindDirectionStr <> '') and (WindSpeedStr <> '') then
-  begin
-    if WindSpeedStr <> '0' then
-      Result := WideFormat('Rüzgar: %s, %s km/s', [GetWindDirectionText, WindSpeedStr])
-    else
-      Result := 'Rüzgar: Yok';
-  end;
+  if WindDirectionStr <> '' then
+    Result := WideFormat('Rüzgar: %s', [WindDirectionStr])
+  else
+    Result := 'Rüzgar: Yok';
 end;
 
 function THavaCivaMainForm.GetWindDirectionText: WideString;
@@ -1422,16 +1316,20 @@ begin
 end;
 
 function THavaCivaMainForm.GetWeatherText: WideString;
+{
 var
   CondCodeInt: Integer;
+}
 begin
-  Result := '';
+  Result := CondTextStr;
+  {
   if CondCodeStr <> '' then
   begin
     CondCodeInt := StrToIntDef(CondCodeStr, 3200);
     if CondCodeInt = 3200 then CondCodeInt := 49;
     Result := WeatherIcons[CondCodeInt].Turkish;
   end;
+  }
 end;
 
 function THavaCivaMainForm.GetVisibilityText: WideString;
@@ -1439,10 +1337,12 @@ var
   Visibility: Single;
 begin
   Visibility := StrToFloatDef(VisibilityStr, -1.0, EnglishFS);
-  //Visibility := Visibility / 100;
-  if Visibility < 0 then Result := ''
-  else if Visibility >= 320 then Result := 'Sýnýrsýz'
-       else Result := FormatFloat('0.00 km', Visibility);
+  if Visibility < 0 then
+    Result := ''
+  else if Visibility >= 320 then
+    Result := 'Sýnýrsýz'
+  else
+    Result := FormatFloat('0.00 km', Visibility);
 end;
 
 procedure THavaCivaMainForm.VersionTimerTimer(Sender: TObject);
@@ -1472,7 +1372,6 @@ procedure THavaCivaMainForm.LoadedTimerTimer(Sender: TObject);
 begin
   LoadedTimer.Enabled := False;
   ShowMainForm;
-  //if ShowInfoText then InfoTextForm.ShowForm;
   if FirstUsage then TrayIcon.ShowBalloonHint;
   { v1.50 }
   if HibernateCheck then HibernateActionExecute(Self);
@@ -1485,7 +1384,6 @@ begin
   begin
     if Opacity + Step >= Max then
     begin
-      //Application.ProcessMessages;
       Opacity := Max;
       UpdateMainWindow;
       Break;
@@ -1503,7 +1401,6 @@ begin
   begin
     if Opacity - Step <= Min then
     begin
-      //Application.ProcessMessages;
       Opacity := Min;
       UpdateMainWindow;
       Break;
@@ -1556,54 +1453,10 @@ begin
   Result := Round(R.Height);
 end;
 
-procedure THavaCivaMainForm.PaintInfoText;
-var
-  oRect, R: TGPRectF;
-  oBrush: TGPSolidBrush;
-  WideText: WideString;
-begin
-  if InfoTextLbl.Visible then
-  begin
-
-    WideText := InfoText;
-
-    if WideText <> '' then
-    begin
-      GdiPlusMeasureString(DrawCanvas, WideText, oRect, InfoTextLbl.Font, StringAlignmentCenter);
-
-      InfoTextLbl.ClientWidth := Round(oRect.Width) + 1;
-      InfoTextLbl.ClientHeight := Round(oRect.Height) + 1;
-      InfoTextHeight := Round(oRect.Height) + 1;
-
-      R := MakeRectF(InfoTextLbl.BoundsRect);
-      R.X := InfoTextLbl.Left;
-      R.Y := InfoTextLbl.Top;
-      R.Width := 183;
-      //R.Height := 50;
-
-      oBrush := TGPSolidBrush.Create(MakeColor(51, 0, 0, 0));
-      try
-        //DrawCanvas.FillRectangle(oBrush, R);
-      finally
-        oBrush.Free;
-      end;
-
-      OffsetRectF(R, -1.0, -1.0);
-      GdiPlusDrawText(DrawCanvas, WideText, R, InfoTextLbl.Font,
-        StringAlignmentCenter, aclWhite);
-
-    end;
-  end;
-end;
-
 procedure THavaCivaMainForm.UpdateBackground;
 begin
   Updating := True;
   try
-    {
-    ReleaseHandle;
-    AllocateHandle;
-    }
     ClearBuffer;
     PaintBackground;
     PaintEarth;
@@ -1616,7 +1469,8 @@ end;
 procedure THavaCivaMainForm.PaintButtons;
 begin
 
-  if IsActive then begin
+  if IsActive then
+  begin
     if ExitBtn.Visible then
       DrawCanvas.DrawImage(CloseImage, ExitBtn.Left, ExitBtn.Top,
         CloseImage.GetWidth, CloseImage.GetHeight);
@@ -1633,7 +1487,6 @@ function THavaCivaMainForm.GetDateTime: WideString;
 begin
   if ConnectionStatus <> csConnected then Result := ''
   else
-    //Result := FormatDateTime(SysUtils.LongDateFormat, SysUtils.Now, FormatSettings);
     Result := WideFormatDate(SysUtils.Now(), TurkishFS);
 end;
 
@@ -1662,7 +1515,8 @@ var
 begin
   FavoritesMenu.Clear;
   IniFile.ReadSectionValues(sFavorites, Favorites);
-  if Favorites.Count > 0 then begin
+  if Favorites.Count > 0 then
+  begin
     Favorites.Sort;
     for Index := 0 to Favorites.Count - 1 do
     begin
@@ -1688,8 +1542,10 @@ begin
   if ConnectionStatus = csConnecting then Exit;
   Item := Sender as TMenuItem;
   ACityID := IniFile.ReadString(sFavorites, Item.Caption, '');
-  if ACityID <> '' then begin
+  if ACityID <> '' then
+  begin
     CityID := ACityID;
+    SearchCityStr := Item.Caption;
     InternetUpdate;
   end;
 end;
@@ -1705,9 +1561,7 @@ begin
       if Windows.MessageBox(Self.Handle,
         PChar(Format(sUpdateMessage, [VersionStr])), 'Yeni Sürüm için Uyarý',
         MB_YESNO or MB_ICONINFORMATION) = IDYES then
-          ShellExecute(Self.Handle, 'open', MyHomePage + 'index.html#havacivanew',
-            nil, nil, SW_SHOWNORMAL);
-
+          ShellExecute(Self.Handle, 'open', MyHomePage, nil, nil, SW_SHOWNORMAL);
   end;
 end;
 
@@ -1783,10 +1637,6 @@ procedure THavaCivaMainForm.PaintSun;
 begin
   if WeatherLbl.Visible then
   begin
-    {
-    DrawImageTo(DrawCanvas, WeatherLbl.Left, WeatherLbl.Top,
-      SunImage.GetWidth, SunImage.GetHeight, SunImage, 140);
-    }
     DrawCanvas.DrawImage(SunImage, WeatherLbl.Left, WeatherLbl.Top,
       SunImage.GetWidth, SunImage.GetHeight);
   end;
@@ -1851,8 +1701,11 @@ begin
       Delete(Result, Length(Result) - 1, 2);
     if Result <> '' then
       Result := sHavaCiva + ' - ' + Result
-    else Result := sHavaCiva;
-  end else Result := 'Hava Cýva! - ' + GetConnectionText;
+    else
+      Result := sHavaCiva;
+  end
+  else
+    Result := 'Hava Cýva! - ' + GetConnectionText;
 end;
 
 function THavaCivaMainForm.GetSituationText: WideString;
@@ -1866,7 +1719,8 @@ function THavaCivaMainForm.GetTemperatureText: WideString;
 begin
   if CondTempStr <> '' then
     Result := CondTempStr + #0176
-  else Result := '';
+  else
+    Result := '';
 end;
 
 procedure THavaCivaMainForm.ToggleInfoTextForm(Value: Boolean);
@@ -1881,173 +1735,112 @@ end;
 
 procedure THavaCivaMainForm.ParseWeatherXML;
 var
-  xmlPage, Elem, ElemList, NodeMap: OleVariant;
+  xmlPage: IXMLDOMDocument;
+  Node: IXMLDOMNode;
+  Elem: IXMLDOMElement;
+  ElemList: IXMLDOMNodeList;
   I, Len: Integer;
+  Text: WideString;
 begin
 
   if WeatherXML = '' then Exit;
 
-  xmlPage := CreateOleObject('Microsoft.XMLDOM');
+  xmlPage := CreateOleObject('Microsoft.XMLDOM') as IXMLDOMDocument;
   try
 
-    if not VarIsClear(xmlPage) then
+    if Assigned(xmlPage) then
     begin
 
       if xmlPage.LoadXML(WeatherXML) then
       begin
-        // lastBuildDate
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/lastBuildDate');
-        try
-          if not VarIsClear(Elem) then
-            LastBuildDateStr := Elem.Text;
-        finally
-          Elem := Unassigned;
+
+        { xmlPage.save('weather.xml'); }
+
+        // error
+        Node := xmlPage.documentElement.selectSingleNode('/weatherdata/weather/@errormessage');
+        if Assigned(Node) then
+        begin
+          Exit;
         end;
 
-        // yweather:location
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/yweather:location');
-        try
-          if not VarIsClear(Elem) then
-          begin
-            NodeMap := Elem.attributes;
-            try
-              LocCityStr := NodeMap.getNamedItem('city').Text;
-              LocRegionStr := NodeMap.getNamedItem('region').Text;
-              LocCountryStr := NodeMap.getNamedItem('country').Text;
-            finally
-              NodeMap := Unassigned;
-            end;
-          end;
-        finally
-          Elem := Unassigned;
+        // location, lat, long
+        Node := xmlPage.documentElement.selectSingleNode('/weatherdata/weather');
+        if Assigned(Node) then
+        begin
+          Elem := Node as IXMLDOMElement;
+          Text := Elem.getAttribute('weatherlocationname');
+          if Pos(',', Text) > 0 then Text := Copy(Text, 1, Pos(',', Text) - 1);  
+          LocCityStr := UTF8Decode(Text);
+          LocCountryStr := '';
+          Text := Elem.getAttribute('lat');
+          LatitudeStr := Text;
+          Text := Elem.getAttribute('long');
+          LongitudeStr := Text;
+          Text := Elem.getAttribute('timezone');
+          TimeZoneStr := Text;
         end;
 
-        // yweather:wind
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/yweather:wind');
-        try
-          if not VarIsClear(Elem) then
-          begin
-            NodeMap := Elem.attributes;
-            try
-              WindChillStr := NodeMap.getNamedItem('chill').Text;
-              WindDirectionStr := NodeMap.getNamedItem('direction').Text;
-              WindSpeedStr := NodeMap.getNamedItem('speed').Text;
-            finally
-              NodeMap := Unassigned;
-            end;
-          end;
-        finally
-          Elem := Unassigned;
+        // sunrise, sunset
+        SunriseStr := '00:00';
+        SunsetStr := '00:00';
+
+        // time, temp, text, code
+        Node := xmlPage.documentElement.selectSingleNode('/weatherdata/weather/current');
+        if Assigned(Node) then
+        begin
+          Elem := Node as IXMLDOMElement;
+          Text := Elem.getAttribute('observationtime');
+          LocalTimeStr := Text;
+          Text := Elem.getAttribute('temperature');
+          CondTempStr := Text;
+          Text := Elem.getAttribute('skytext');
+          CondTextStr := UTF8Decode(Text);
+          Text := Elem.getAttribute('skycode');
+          CondCodeStr := Text;
+          PressureStr := '0';
+          Text := Elem.getAttribute('humidity');
+          HumidityStr := Text;
+          VisibilityStr := '0';
+          Text := Elem.getAttribute('feelslike');
+          WindChillStr := Text;
+          Text := Elem.getAttribute('windspeed');
+          WindSpeedStr := Text;
+          Text := Elem.getAttribute('winddisplay');
+          WindDirectionStr := UTF8Decode(Text);
         end;
 
-        // yweather:atmosphere
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/yweather:atmosphere');
+        // days
+        ElemList := xmlPage.documentElement.selectNodes('/weatherdata/weather/forecast');
         try
-          if not VarIsClear(Elem) then
-          begin
-            NodeMap := Elem.attributes;
-            try
-              HumidityStr := NodeMap.getNamedItem('humidity').Text;
-              VisibilityStr := NodeMap.getNamedItem('visibility').Text;
-            finally
-              NodeMap := Unassigned;
-            end;
-          end;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // yweather:astronomy
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/yweather:astronomy');
-        try
-          if not VarIsClear(Elem) then
-          begin
-            NodeMap := Elem.attributes;
-            try
-              SunriseStr := NodeMap.getNamedItem('sunrise').Text;
-              SunsetStr := NodeMap.getNamedItem('sunset').Text;
-            finally
-              NodeMap := Unassigned;
-            end;
-          end;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // geo:lat
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/item/geo:lat');
-        try
-          if not VarIsClear(Elem) then
-            LatitudeStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // geo:long
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/item/geo:long');
-        try
-          if not VarIsClear(Elem) then
-            LongitudeStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // pubDate
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/item/pubDate');
-        try
-          if not VarIsClear(Elem) then
-            PubDateStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // yweather:condition
-        Elem := xmlPage.documentElement.selectSingleNode('/rss/channel/item/yweather:condition');
-        try
-          if not VarIsClear(Elem) then
-          begin
-            NodeMap := Elem.attributes;
-            try
-              CondTextStr := NodeMap.getNamedItem('text').Text;
-              CondCodeStr := NodeMap.getNamedItem('code').Text;
-              CondTempStr := NodeMap.getNamedItem('temp').Text;
-              CondDateStr := NodeMap.getNamedItem('date').Text;
-            finally
-              NodeMap := Unassigned;
-            end;
-          end;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // yweather:forecast
-        ElemList := xmlPage.documentElement.selectNodes('/rss/channel/item/yweather:forecast');
-        try
-          if (not VarIsClear(ElemList)) and (ElemList.Length > 0) then
+          if Assigned(ElemList) and (ElemList.Length > 1) then
           begin
             Len := ElemList.Length;
-            for I := 0 to Len - 1 do
+            if Len > MaxForecast then Len := MaxForecast;
+            Node := ElemList.Item[0];
+            Elem := Node as IXMLDOMElement;
+            ForecastLows[0] := Elem.getAttribute('low');
+            ForecastHighs[0] := Elem.getAttribute('high');
+            ForecastCodes[0] := Elem.getAttribute('skycodeday');
+            ForecastTexts[0] := UTF8Decode(Elem.getAttribute('skytextday'));
+            ForecastDays[0] := UTF8Decode(Elem.getAttribute('shortday'));
+            for I := 1 to Len - 1 do
             begin
-              NodeMap := ElemList.Item[I].attributes;
-              try
-                ForecastLows[I]  := NodeMap.getNamedItem('low').Text;
-                ForecastDays[I]  := NodeMap.getNamedItem('day').Text;
-                ForecastHighs[I] := NodeMap.getNamedItem('high').Text;
-                ForecastTexts[I] := NodeMap.getNamedItem('text').Text;
-                ForecastCodes[I] := NodeMap.getNamedItem('code').Text;
-                ForecastDates[I] := NodeMap.getNamedItem('date').Text;
-              finally
-                NodeMap := Unassigned;
-              end;
+              Node := ElemList.Item[I];
+              Elem := Node as IXMLDOMElement;
+              ForecastLows[I] := Elem.getAttribute('low');
+              ForecastHighs[I] := Elem.getAttribute('high');
+              ForecastCodes[I] := Elem.getAttribute('skycodeday');
+              ForecastTexts[I] := UTF8Decode(Elem.getAttribute('skytextday'));
+              ForecastDays[I] := UTF8Decode(Elem.getAttribute('shortday'));
             end;
           end;
         finally
-          ElemList := Unassigned;
+          ElemList := nil;
         end;
       end; // end of "if xmlPage.LoadXML(WeatherXML) then"
     end; // end of "if not VarIsClear(xmlPage) then"
   finally
-    xmlPage := Unassigned;
+    xmlPage := nil;
   end;
 end;
 
@@ -2055,35 +1848,23 @@ procedure THavaCivaMainForm.ResetData;
 var
   I: Integer;
 begin
-
   SunriseStr := '';
   SunsetStr := '';
   LatitudeStr := '';
   LongitudeStr := '';
-  TimeZoneStr := '';
   LocalTimeStr := '';
-
+  TimeZoneStr := '';
   WindChillStr := '';
   WindDirectionStr := '';
   WindSpeedStr := '';
-
-  LastBuildDateStr := '';
-
   LocCityStr := '';
-  LocRegionStr := '';
   LocCountryStr := '';
-
   HumidityStr := '';
   VisibilityStr := '';
   PressureStr := '';
-  RisingStr := '';
-  PubDateStr := '';
-
   CondTextStr := '';
   CondCodeStr := '';
   CondTempStr := '';
-  CondDateStr := '';
-  
   for I := 0 to MaxForecast - 1 do
   begin
     ForecastDays[I] := '';
@@ -2093,9 +1874,7 @@ begin
     ForecastDates[I] := '';
     ForecastTexts[I] := '';
   end;
-
-  IsDateShift := False;
-
+  SearchCityStr := '';
 end;
 
 procedure THavaCivaMainForm.WMMove(var Message: TWMMove);
@@ -2149,10 +1928,6 @@ end;
 
 procedure THavaCivaMainForm.AboutActionExecute(Sender: TObject);
 begin
-  {
-  MessageDlg('Hava Cýva! 1.0b'#13#10'Test sürümü'#13#10#13#10'freedelphi@hotmail.com',
-    mtInformation, [mbOK], 0);
-  }
   AboutForm.ShowForm;
 end;
 
@@ -2163,7 +1938,8 @@ var
 begin
   TrayFavoritesMenu.Clear;
   IniFile.ReadSectionValues(sFavorites, Favorites);
-  if Favorites.Count > 0 then begin
+  if Favorites.Count > 0 then
+  begin
     Favorites.Sort;
     for Index := 0 to Favorites.Count - 1 do
     begin
@@ -2258,201 +2034,6 @@ begin
   Result := Trunc(Phase);
 end;
 
-procedure THavaCivaMainForm.DrawImageTo(Graphics: TGPGraphics; X, Y, W, H: Single;
-  Image: TGPBitmap; Alpha: Byte);
-const
-  CMatrix: ColorMatrix = (
-    (1.0, 0.0, 0.0, 0.0, 0.0),
-    (0.0, 1.0, 0.0, 0.0, 0.0),
-    (0.0, 0.0, 1.0, 0.0, 0.0),
-    (0.0, 0.0, 0.0, 1.0, 0.0),
-    (0.0, 0.0, 0.0, 0.0, 1.0)
-  );
-var
-  Attr: TGPImageAttributes;
-  Matrix: ColorMatrix;
-begin
-
-  Matrix := CMatrix;
-
-  Matrix[3, 3] := (Alpha / 255);
-
-  Attr := TGPImageAttributes.Create;
-  try
-    Attr.SetWrapMode(WrapModeTile);
-    Attr.SetColorMatrix(Matrix, ColorMatrixFlagsDefault, ColorAdjustTypeBitmap);
-
-    Graphics.DrawImage(Image,
-      MakeRect(X, Y, W, H),  // dest rect
-      0, 0, Image.GetWidth, Image.GetHeight, // source rect
-      UnitPixel,
-      Attr);
-
-  finally
-    Attr.Free;
-  end;
-
-end;
-
-procedure THavaCivaMainForm.ParseDocumentDateTime;
-var
-  DocSysTime, BuildSysTime: TSystemTime;
-  DocTimeText: WideString; { v1.50 }
-
-  procedure IncHour(var Hour: Word);
-  begin
-    if Hour = 23 then Hour := 0
-    else Inc(Hour);
-  end;
-
-begin
-  { v1.50 }
-  DocTimeText := GetDocumentTimeText();
-  if DocTimeToSystemTime(DocTimeText, DocSysTime) then
-  begin
-
-    if DocSysTime.wHour < 6 then begin
-      IsDateShift := False;
-      Exit;
-    end;
-
-    UTCTimeToSystemTime(LastBuildDateStr, BuildSysTime);
-    if BuildSysTime.wMinute > 45 then
-      IncHour(BuildSysTime.wHour);
-
-    if BuildSysTime.wHour >= (DocSysTime.wHour - 6) then
-      IsDateShift := False
-    else IsDateShift := True;
-    
-  end;
-end;
-
-function THavaCivaMainForm.UTCTimeToSystemTime(const UTCTime: string;
-  var SystemTime: TSystemTime): Boolean;
-var
-  Parser: TParser;
-  Stream: TStringStream;
-  AMPM: string;
-begin
-  Result := False;
-  if UTCTime = '' then Exit;
-  // Mon, 27 Nov 2006 10:20 pm EET
-  Stream := TStringStream.Create(UTCTime);
-  try
-    Parser := TParser.Create(Stream);
-    try
-      FillChar(SystemTime, SizeOf(TSystemTime), 0);
-      AMPM := '';
-      if Parser.Token = toSymbol then
-        SystemTime.wDayOfWeek := ShortDayStrToInt(Parser.TokenString); // Haftanin Gunu: "Mon"
-      Parser.NextToken;
-      if Parser.Token = ',' then
-        Parser.NextToken;
-      if Parser.Token = toInteger then // Sayi olarak Gun: "27"
-        SystemTime.wDay := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = toSymbol then // Yazi olarak ay: "Nov"
-        SystemTime.wMonth := ShortMonthStrToInt(Parser.TokenString);
-      Parser.NextToken;
-      if Parser.Token = toInteger then // Sayi olarak yil: "2006"
-        SystemTime.wYear := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = toInteger then // Saat: "10"
-        SystemTime.wHour := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = ':' then // Saat ayraci
-        Parser.NextToken;
-      if Parser.Token = toInteger then // Dakika: "20"
-        SystemTime.wMinute := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = toSymbol then // am/pm
-        AMPM := LowerCase(Parser.TokenString);
-      Parser.NextToken;
-
-      if (SystemTime.wHour = 12) and (AMPM = 'am') then
-        SystemTime.wHour := 0
-      else if (SystemTime.wHour = 12) and (AMPM = 'pm') then
-        SystemTime.wHour := 12
-      else if AMPM = 'pm' then
-        SystemTime.wHour := SystemTime.wHour + 12;
-      Result := True;    
-    finally
-      Parser.Free;
-    end;
-  finally
-    Stream.Free;
-  end;
-end;
-
-function THavaCivaMainForm.DocTimeToSystemTime(const DocTime: string;
-  var SystemTime: TSystemTime): Boolean;
-var
-  Parser: TParser;
-  Stream: TStringStream;
-begin
-  // Mon Nov 27 12:47:19 PST 2006
-  Result := False;
-  if DocTime = '' then Exit;
-  Stream := TStringStream.Create(DocTime);
-  try
-    Parser := TParser.Create(Stream);
-    try
-      FillChar(SystemTime, SizeOf(TSystemTime), 0);
-      if Parser.Token = toSymbol then
-        SystemTime.wDayOfWeek := ShortDayStrToInt(Parser.TokenString); // Haftanin Gunu: "Mon"
-      Parser.NextToken;
-      if Parser.Token = toSymbol then // Yazi olarak ay: "Nov"
-        SystemTime.wMonth := ShortMonthStrToInt(Parser.TokenString);
-      Parser.NextToken;
-      if Parser.Token = toInteger then // Sayi olarak Gun: "27"
-        SystemTime.wDay := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = toInteger then // Saat: "12"
-        SystemTime.wHour := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = ':' then // Saat ayraci
-        Parser.NextToken;
-      if Parser.Token = toInteger then // Dakika: "47"
-        SystemTime.wMinute := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = ':' then // Dakika ayraci
-        Parser.NextToken;
-      if Parser.Token = toInteger then // Saniye: "19"
-        SystemTime.wSecond := Parser.TokenInt;
-      Parser.NextToken;
-      if Parser.Token = toSymbol then // "PST"
-        Parser.NextToken;
-      if Parser.Token = toInteger then // Sayi olarak yil: "2006"
-        SystemTime.wYear := Parser.TokenInt;
-      Result := True;
-    finally
-      Parser.Free;
-    end;
-  finally
-    Stream.Free;
-  end;
-end;
-
-function THavaCivaMainForm.GetDocumentTimeText: string;
-const
-  //SearchText = 'compressed/chunked ';
-  SearchText = 'compressed '; { v1.50 }
-var
-  StartPos, EndPos: Integer;
-  TempText: string;
-begin
-  Result := '';
-  if WeatherXML = '' then Exit;
-  StartPos := System.Pos(SearchText, WeatherXML);
-  if StartPos > 0 then { > 0 olmali. v1.50 }
-  begin
-    TempText := System.Copy(WeatherXML, StartPos + Length(SearchText), MaxInt);
-    EndPos := System.Pos(' -->', TempText) - 1;
-    if EndPos > 0 then { > 0 olmali. v1.50 }
-      Result := System.Copy(TempText, 1, EndPos);
-  end;
-end;
-
 procedure THavaCivaMainForm.UpdateFormStyle;
 begin
   if StayOnTop then
@@ -2516,7 +2097,6 @@ end;
 
 procedure THavaCivaMainForm.MiniActionExecute(Sender: TObject);
 begin
-  //if MainViewStyle = mvsMini then Exit;
   MainViewStyle := mvsMini;
   UpdateMainViewStyle;
   AnimateViewStyleUp;
@@ -2543,7 +2123,6 @@ end;
 
 procedure THavaCivaMainForm.MaxiActionExecute(Sender: TObject);
 begin
-  //if MainViewStyle = mvsMaxi then Exit;
   MainViewStyle := mvsMaxi;
   AnimateViewStyleDown;
   UpdateMainViewStyle;
@@ -2552,7 +2131,8 @@ end;
 
 procedure THavaCivaMainForm.AnimateViewStyleDown;
 begin
-  while BackScale < GetBackScale do begin
+  while BackScale < GetBackScale do
+  begin
     BackScale := BackScale + 0.25;
     Self.UpdateLayered;
   end;
@@ -2560,7 +2140,8 @@ end;
 
 procedure THavaCivaMainForm.AnimateViewStyleUp;
 begin
-  while BackScale > GetBackScale do begin
+  while BackScale > GetBackScale do
+  begin
     BackScale := BackScale - 0.25;
     Self.UpdateLayered;
   end;
@@ -2602,7 +2183,8 @@ begin
       MouseTimer.Enabled := True;
     end;
   end
-  else if PrevFormStyle <> 0 then begin
+  else if PrevFormStyle <> 0 then
+  begin
     MouseTimer.Enabled := False;
     Wakeup;
     SetWindowLong(Self.Handle, GWL_EXSTYLE, PrevFormStyle);
@@ -2663,7 +2245,8 @@ end;
 procedure THavaCivaMainForm.CMRestoreApp(var Message: TMessage);
 begin
   Application.Restore;
-  if not Self.Visible then begin
+  if not Self.Visible then
+  begin
     ShowMainForm;
     if ShowInfoText then InfoTextForm.ShowForm;
   end;
@@ -2684,324 +2267,41 @@ begin
   Message.Result := Integer(True);
 end;
 
-procedure THavaCivaMainForm.ParseWeatherXML180;
+procedure THavaCivaMainForm.BeginCityWeather;
 var
-  xmlPage, Elem, ElemList, NodeMap: OleVariant;
-  I, Len: Integer;
-  Text: WideString;
-  DayOrNight, CheckIcon: string;
+  FormattedURL, NewCityID: string;
 begin
 
-  if WeatherXML = '' then Exit;
-
-  xmlPage := CreateOleObject('Microsoft.XMLDOM');
-  try
-
-    if not VarIsClear(xmlPage) then
-    begin
-
-      if xmlPage.LoadXML(WeatherXML) then
-      begin
-
-        { xmlPage.save('weather.xml'); }
-
-        // location
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/dnam');
-        try
-          if not VarIsClear(Elem) then
-          begin
-            Text := Elem.Text;
-            if Pos(',', Text) > 0 then
-            begin
-              LocCityStr := Trim(Copy(Text, 1, Pos(',', Text) - 1));
-              LocCountryStr := Trim(Copy(Text, Pos(',', Text) + 1, MaxInt));
-            end;
-          end;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // time
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/tm');
-        try
-          if not VarIsClear(Elem) then
-            LocalTimeStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // lat
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/lat');
-        try
-          if not VarIsClear(Elem) then
-            LatitudeStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // long
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/lon');
-        try
-          if not VarIsClear(Elem) then
-            LongitudeStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // sunrise
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/sunr');
-        try
-          if not VarIsClear(Elem) then
-            SunriseStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // sunset
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/suns');
-        try
-          if not VarIsClear(Elem) then
-            SunsetStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // timezone
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/loc/zone');
-        try
-          if not VarIsClear(Elem) then
-            TimeZoneStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // pubDate
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/lsup');
-        try
-          if not VarIsClear(Elem) then
-            PubDateStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // temp
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/tmp');
-        try
-          if not VarIsClear(Elem) then
-            CondTempStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // text
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/t');
-        try
-          if not VarIsClear(Elem) then
-            CondTextStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // code
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/icon');
-        try
-          if not VarIsClear(Elem) then
-            CondCodeStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-        {
-        // date
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/lsup');
-        try
-          if not VarIsClear(Elem) then
-            CondDateStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-        }
-        // chill
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/flik');
-        try
-          if not VarIsClear(Elem) then
-            WindChillStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // pressure
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/bar/r');
-        try
-          if not VarIsClear(Elem) then
-            PressureStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // humidity
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/hmid');
-        try
-          if not VarIsClear(Elem) then
-            HumidityStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // visibility
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/vis');
-        try
-          if not VarIsClear(Elem) then
-            VisibilityStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // wind speed
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/wind/s');
-        try
-          if not VarIsClear(Elem) then
-            WindSpeedStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // wind direction
-        Elem := xmlPage.documentElement.selectSingleNode('/weather/cc/wind/d');
-        try
-          if not VarIsClear(Elem) then
-            WindDirectionStr := Elem.Text;
-        finally
-          Elem := Unassigned;
-        end;
-
-        // days
-        ElemList := xmlPage.documentElement.selectNodes('/weather/dayf/day');
-        try
-          if (not VarIsClear(ElemList)) and (ElemList.Length > 0) then
-          begin
-
-            Len := ElemList.Length;
-            if Len > MaxForecast then Len := MaxForecast;
-
-            // v1.95
-            CheckIcon := '';
-            Elem := ElemList.Item[0].selectSingleNode('part[@p="d"]/icon');
-            try
-              if not VarIsClear(Elem) then
-                CheckIcon := Elem.Text;
-            finally
-              Elem := Unassigned;
-            end;
-            {
-            Elem := ElemList.Item[0].selectSingleNode('hi');
-            try
-              if not VarIsClear(Elem) then
-                ForecastHighs[0] := Elem.Text;
-            finally
-              Elem := Unassigned;
-            end;
-            }
-            DayOrNight := 'd';
-            //if ForecastHighs[0] = 'N/A' then DayOrNight := 'n'; // v1.80
-            //if (ForecastHighs[0] = 'N/A') or (ForecastHighs[0] = '') then DayOrNight := 'n'; // v1.90
-            if CheckIcon = '' then DayOrNight := 'n'; // v1.95
-
-            NodeMap := ElemList.Item[0].attributes;
-            try
-              ForecastDays[0]  := NodeMap.getNamedItem('t').Text;
-              ForecastDates[0] := NodeMap.getNamedItem('dt').Text;
-            finally
-              NodeMap := Unassigned;
-            end;
-
-            Elem := ElemList.Item[0].selectSingleNode('low');
-            try
-              if not VarIsClear(Elem) then
-                ForecastLows[0] := Elem.Text;
-            finally
-              Elem := Unassigned;
-            end;
-
-            Elem := ElemList.Item[0].selectSingleNode('part[@p="' + DayOrNight + '"]/icon');
-            try
-              if not VarIsClear(Elem) then
-                ForecastCodes[0] := Elem.Text;
-            finally
-              Elem := Unassigned;
-            end;
-            {
-            if ForecastHighs[0] = 'N/A' then
-              ForecastCodes[0] := CondCodeStr;
-            }
-            Elem := ElemList.Item[0].selectSingleNode('part[@p="' + DayOrNight + '"]/t');
-            try
-              if not VarIsClear(Elem) then
-                ForecastTexts[0] := Elem.Text;
-            finally
-              Elem := Unassigned;
-            end;
-            {
-            if ForecastHighs[0] = 'N/A' then
-              ForecastTexts[0] := CondTextStr;
-            }
-
-            // v1.90
-            if (ForecastHighs[0] = 'N/A') or (ForecastHighs[0] = '') then
-              ForecastHighs[0] := CondTempStr;
-
-            for I := 1 to Len - 1 do
-            begin
-
-              NodeMap := ElemList.Item[I].attributes;
-              try
-                ForecastDays[I]  := NodeMap.getNamedItem('t').Text;
-                ForecastDates[I] := NodeMap.getNamedItem('dt').Text;
-              finally
-                NodeMap := Unassigned;
-              end;
-
-              Elem := ElemList.Item[I].selectSingleNode('hi');
-              try
-                if not VarIsClear(Elem) then
-                  ForecastHighs[I] := Elem.Text;
-              finally
-                Elem := Unassigned;
-              end;
-
-              Elem := ElemList.Item[I].selectSingleNode('low');
-              try
-                if not VarIsClear(Elem) then
-                  ForecastLows[I] := Elem.Text;
-              finally
-                Elem := Unassigned;
-              end;
-
-              Elem := ElemList.Item[I].selectSingleNode('part[@p="d"]/icon');
-              try
-                if not VarIsClear(Elem) then
-                  ForecastCodes[I] := Elem.Text;
-              finally
-                Elem := Unassigned;
-              end;
-
-              Elem := ElemList.Item[I].selectSingleNode('part[@p="d"]/t');
-              try
-                if not VarIsClear(Elem) then
-                  ForecastTexts[I] := Elem.Text;
-              finally
-                Elem := Unassigned;
-              end;
-              
-            end;
-          end;
-        finally
-          ElemList := Unassigned;
-        end;
-      end; // end of "if xmlPage.LoadXML(WeatherXML) then"
-    end; // end of "if not VarIsClear(xmlPage) then"
-  finally
-    xmlPage := Unassigned;
+  if Assigned(WeatherThread) then
+  begin
+    if not WeatherThread.Terminated then Exit;
   end;
+
+  ConnectionStatus := csConnecting;
+  UpdateLayered;
+  if Assigned(WeatherThread) then FreeAndNil(WeatherThread);
+
+  { v3.00 }
+  WeatherThread := TInternetThread.Create(Self.Handle, WM_WEATHERDONE);
+  with WeatherThread do
+  begin
+    NewCityID := CityID;
+    if Pos('|', NewCityID) > 0 then NewCityID := Copy(NewCityID, 1, Pos('|', NewCityID) - 1);
+    if (Pos('wc:', NewCityID) = 0) and (Pos('fr:', NewCityID) = 0) then NewCityID := 'wc:' + NewCityID;
+    FormattedURL := Format(ForecastURL, [NewCityID, UnitValue, 'tr-TR']); //en-US
+    Request.Open('GET', FormattedURL);
+    Resume;
+  end;
+
+end;
+
+procedure THavaCivaMainForm.AntialiasActionExecute(Sender: TObject);
+begin
+  AntialiasAction.Checked := not AntialiasAction.Checked;
+  Antialias := not AntialiasAction.Checked;
+  UpdateLayered;
+  if Assigned(InfoTextForm) then
+    InfoTextForm.UpdateLayered;
 end;
 
 end.

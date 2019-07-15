@@ -10,6 +10,8 @@
 {       Update  : 21.03.2008                            }
 {       Update  : 25.05.2013                            }
 {       Update  : 25.11.2015                            }
+{       Update  : 14.05.2016                            }
+{       Update  : 25.03.2019                            }
 {                                                       }
 {*******************************************************}
 
@@ -19,7 +21,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, ComCtrls, StdCtrls, IniFiles, ExtCtrls;
+  Dialogs, ComCtrls, StdCtrls, IniFiles, ExtCtrls, HTTPApp;
 
 type
   TOptionsForm = class(TForm)
@@ -93,6 +95,7 @@ type
     Label17: TLabel;
     Label18: TLabel;
     CheckBox20: TCheckBox;
+    CheckBox21: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure ComboBox1Change(Sender: TObject);
     procedure CheckBox2Click(Sender: TObject);
@@ -146,7 +149,7 @@ var
   
 implementation
 
-uses ConstDef, WinInet, ActiveX, ComObj, ShlObj, Main, Internet;
+uses ConstDef, WinInet, ActiveX, ComObj, ShlObj, Main, Internet, msxml;
 
 {$R *.dfm}
 
@@ -216,6 +219,7 @@ begin
   CheckBox14.Checked := IniFile.ReadBool(sAppearance, sShowChill, False);
   CheckBox15.Checked := IniFile.ReadBool(sAppearance, sShowWeatherText, True);
   CheckBox20.Checked := IniFile.ReadBool(sAppearance, sShowInfoText, True);
+  CheckBox21.Checked := not IniFile.ReadBool(sAppearance, sAntialias, False);
   ToggleInfoText(CheckBox20.Checked);
 
   TempFont.Name := IniFile.ReadString(sAppearance, sTempFontName, 'Arial');
@@ -230,7 +234,7 @@ end;
 
 procedure TOptionsForm.SaveOptions;
 var
-  CityName, CityID: string;
+  CityName, CityFullName, CityID: string;
   I: Integer;
 begin
 
@@ -241,26 +245,32 @@ begin
   IniFile.WriteInteger(sGeneral, sUpdatePeriod, ComboBox3.ItemIndex);
   IniFile.WriteInteger(sAppearance, sBackground, ComboBox2.ItemIndex);
 
-  if FCityChanged then begin
+  if FCityChanged then
+  begin
     CityName := '';
     CityID := '';
     if (RadioButton1.Checked) and (ComboBox1.ItemIndex <> -1) then
     begin
       CityName := ComboBox1.Items[ComboBox1.ItemIndex];
+      CityFullName := CityName;
       CityID := CitiesTU.ValueFromIndex[ComboBox1.ItemIndex];
     end
     else if (RadioButton2.Checked) and (ListBox1.ItemIndex <> -1) then
     begin
       CityName := ListBox1.Items[ListBox1.ItemIndex];
+      CityFullName := CitiesFound.Names[ListBox1.ItemIndex];
       CityID := CitiesFound.ValueFromIndex[ListBox1.ItemIndex];
     end
     else if (RadioButton3.Checked) and (ListBox2.ItemIndex <> -1) then
     begin
       CityName := ListBox2.Items[ListBox2.ItemIndex];
+      CityFullName := Favorites.Names[ListBox2.ItemIndex];
       CityID := Favorites.ValueFromIndex[ListBox2.ItemIndex];
     end;
 
-    if (CityName <> '') and (CityID <> '') then begin
+    if (CityName <> '') and (CityID <> '') then
+    begin
+      IniFile.WriteString(sLocation, sCityFullName, CityName);
       IniFile.WriteString(sLocation, sCityName, CityName);
       IniFile.WriteString(sLocation, sCityID, CityID);
     end;
@@ -292,7 +302,8 @@ begin
 
   IniFile.WriteInteger(sAppearance, sLastTabSheet, PageControl1.ActivePageIndex);
 
-  if FavListChanged then begin
+  if FavListChanged then
+  begin
     IniFile.EraseSection(sFavorites);
     for I := 0 to Favorites.Count - 1 do
     begin
@@ -303,9 +314,10 @@ begin
   end;
   IniFile.WriteString(sAppearance, sTempFontName, TempFont.Name);
   IniFile.WriteString(sAppearance, sCityFontName, CityFont.Name);
+  IniFile.WriteBool(sAppearance, sAntialias, not CheckBox21.Checked);
 
   UpdateShellLinks;
-  
+
 end;
 
 procedure TOptionsForm.CheckBox2Click(Sender: TObject);
@@ -404,78 +416,60 @@ var
   Cities: TStringList;
   DataCount: Integer;
   Request: TRequest;
+  FormattedURL: string;
 
   function ParseSearchResult: Integer;
   var
-    xmlPage, ElemList, Item, Node: OleVariant;
+    xmlPage: IXMLDOMDocument;
+    Node: IXMLDOMNode;
+    Elem: IXMLDOMElement;
+    ElemList: IXMLDOMNodeList;
     Index, Count: Integer;
-    Ident, City, Region, Country, Text: WideString;
+    Ident, Text: WideString;
   begin
     Result := 0;
-    xmlPage := CreateOleObject('Microsoft.XMLDOM');
+    xmlPage := CreateOleObject('Microsoft.XMLDOM') as IXMLDOMDocument;
     try
-      xmlPage.LoadXml(ResponseText);
-      ElemList := xmlPage.documentElement.selectNodes('/response/result/list/item');
-      try
-        if ElemList.Length > 0 then
-        begin
-          Count := ElemList.Length;
-          Result := Count;
-          for Index := 0 to Count - 1 do
+      if Assigned(xmlPage) and xmlPage.LoadXML(ResponseText) then
+      begin
+        ElemList := xmlPage.documentElement.selectNodes('/weatherdata/weather');
+        try
+          if ElemList.Length > 0 then
           begin
-            Item := ElemList.Item[Index];
-            Node := Item.selectSingleNode('id');
-            Ident := Node.Text;
-            if Pos('|', Ident) > 0 then
-              Ident := Copy(Ident, 1, Pos('|', Ident) - 1);
-            Node := Item.selectSingleNode('city');
-            City := Node.Text;
-            Text := City;
-            Node := Item.selectSingleNode('region');
-            Region := Node.Text;
-            Node := Item.selectSingleNode('countryname');
-            Country := Node.Text;
-            if (Region <> '') and (Region <> '*') then
-              Text := Text + ', ' + Region;
-            if Country <> '' then
-              Text := Text + ', ' + Country;
-            Text := UTF8Decode(Text);
-            Cities.Add(Text);
-            CitiesFound.Add(Text + '=' + Ident);
+            Count := ElemList.Length;
+            Result := Count;
+            for Index := 0 to Count - 1 do
+            begin
+              Node := ElemList.Item[Index];
+              Elem := Node as IXMLDOMElement;
+              Ident := Elem.getAttribute('weatherlocationcode');
+              Text := Elem.getAttribute('weatherfullname');
+              Text := UTF8Decode(Text);
+              Cities.Add(Text);
+              CitiesFound.Add(Text + '=' + Ident);
+            end;
           end;
+        finally
+          ElemList := nil;
         end;
-      finally
-        ElemList := Unassigned;
       end;
     finally
-      xmlPage := Unassigned;
+      xmlPage := nil;
     end;
   end;
 
 begin
   ListBox1.Clear;
-  //Button4.Enabled := ListBox1.ItemIndex <> -1;
   Button5.Enabled := False;
   SaveCursor := Screen.Cursor;
   Screen.Cursor := crHourGlass;
   Request := TRequest.Create;
   try
-    Request.Method := 'POST';
-    Request.Host := 'iphone-wu.apple.com';
-    Request.URL := '/dgw?imei=' + AppGuidStr + '&apptype=weather&t=4';
-    Request.ContentType := 'text/xml';
-    Request.UserAgent := 'Apple iPhone v4.2.1 Weather v1.0.0.8C148';
-    Request.Content :=
-      '<?xml version="1.0" encoding="utf-8"?>' +
-      '<request devtype="Apple iPhone v4.2.1" deployver="Apple iPhone v4.2.1" app="YGoiPhoneClient" appver="1.0.0.8C148" api="weather" apiver="1.0.0" acknotification="0000">' +
-	    '<query id="3" timestamp="0" type="getlocationid">' +
-		  '<phrase>' + UTF8Encode(Edit2.Text) + '</phrase>' +
-		  '<language>tr_TR</language>' +
-	    '</query>' +
-      '</request>';
+    FormattedURL := Format(SearchURL, [HTTPEncode(UTF8Encode(Edit2.Text))]);
+    Request.Open('GET', FormattedURL);
     Request.SendRequest(FInternet);
     ResponseText := Request.Response.Content;
-    //InternetSearch;
+    { Request.Response.ContentStream.SaveToFile('search.xml'); }
   finally
     Request.Free;
     Screen.Cursor := SaveCursor;

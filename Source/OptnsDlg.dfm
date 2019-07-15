@@ -24,7 +24,7 @@ object OptionsForm: TOptionsForm
     Top = 8
     Width = 433
     Height = 433
-    ActivePage = TabSheet1
+    ActivePage = TabSheet2
     TabOrder = 0
     object TabSheet1: TTabSheet
       Caption = 'Genel'
@@ -295,6 +295,14 @@ object OptionsForm: TOptionsForm
             TabOrder = 2
           end
         end
+        object CheckBox21: TCheckBox
+          Left = 256
+          Top = 24
+          Width = 97
+          Height = 17
+          Caption = 'Keskin Yaz'#305' Bi'#231'imi'
+          TabOrder = 2
+        end
       end
       object GroupBox4: TGroupBox
         Left = 8
@@ -533,7 +541,7 @@ object OptionsForm: TOptionsForm
           Width = 201
           Height = 21
           Style = csDropDownList
-          ItemHeight = 13
+          ItemHeight = 0
           TabOrder = 4
           OnChange = ComboBox1Change
         end

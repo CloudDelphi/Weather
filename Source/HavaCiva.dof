@@ -112,9 +112,9 @@ RootDir=
 [Version Info]
 IncludeVerInfo=1
 AutoIncBuild=0
-MajorVer=1
-MinorVer=9
-Release=5
+MajorVer=2
+MinorVer=5
+Release=0
 Build=0
 Debug=0
 PreRelease=0
@@ -126,13 +126,13 @@ CodePage=1254
 [Version Info Keys]
 CompanyName=Shenturk.com
 FileDescription=Hava Civa!
-FileVersion=1.9.5.0
+FileVersion=2.8.0.0
 InternalName=havaciva.exe
 LegalCopyright=shenturk.com
 LegalTrademarks=shenturk.com
 OriginalFilename=Havaciva.exe
 ProductName=Havaciva
-ProductVersion=1.9.5.0
+ProductVersion=2.8.0.0
 Comments=shenturk.com
 [HistoryLists\hlUnitAliases]
 Count=1

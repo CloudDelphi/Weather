@@ -2,7 +2,7 @@ unit VarDates;
 
 interface
 
-uses Windows, ActiveX, SysUtils, GdipApi, GdipObj, DirectDraw, SysConst, DateUtils;
+uses Windows, ActiveX, SysUtils, GdipApi, GdipObj, DirectDraw, SysConst, DateUtils, Math;
 
 const
   VAR_VALIDDATE          = $0004;
@@ -90,7 +90,11 @@ function MakeLangID(usPrimaryLanguage, usSubLanguage: ShortInt): Word;
 { MakeLCID }
 function MakeLCID(vLanguageID, vSortID: Word): DWORD;
 
+{ WideGetLocaleMonthDayNames }
 procedure WideGetLocaleMonthDayNames(DefaultLCID: Integer);
+
+{ GetSunriseSunset }
+procedure GetSunriseSunset(Date: TDateTime; Latitude, Longitude, TimeZone: Double; var Sunrise, Sunset: TDateTime);
 
 var
   WideLongMonthNames: array[1..12] of WideString;
@@ -273,6 +277,70 @@ begin
     FormatSettings.LongDayNames[I] := LocalGetLocaleStr(LOCALE_SDAYNAME1 + Day);
   end;
   }
+end;
+
+function MOD_(n, d: Double): Double;
+begin
+  Result := n - d*Round(n/d);
+end;
+
+function RADIANS(Degrees: Double): Double;
+begin
+  Result := DegToRad(Degrees);
+end;
+
+function DEGREES(Grad: Double): Double;
+begin
+  Result := RadToDeg(Grad);
+end;
+
+function ATAN2(Y, X: Double): Double;
+begin
+  Result := ArcTan2(Y, X);
+end;
+
+function ASIN(X: Double): Double;
+begin
+  Result := ArcSin(X);
+end;
+
+function ACOS(X: Double): Double;
+begin
+  Result := ArcCos(X);
+end;
+
+procedure GetSunriseSunset(Date: TDateTime; Latitude, Longitude, TimeZone: Double; var Sunrise, Sunset: TDateTime);
+var
+  D2: TDateTime; // Date
+  B3, // Lat
+  B4, // Long
+  B5: Double; // Time zone
+  E2, F2, G2, I2, J2, K2, L2, M2, P2, Q2, R2, T2, U2, V2, W2, X2, Y2, Z2: Double;
+begin
+  D2 := Date;
+  B3 := Latitude;
+  B4 := Longitude;
+  B5 := TimeZone;
+  E2 := 0.1 / 24;
+  F2 := D2+2415018.5+E2-B5/24;
+  G2 := (F2-2451545)/36525;
+  I2 := MOD_(280.46646+G2*(36000.76983 + G2*0.0003032),360);
+  J2 := 357.52911+G2*(35999.05029 - 0.0001537*G2);
+  K2 := 0.016708634-G2*(0.000042037+0.0000001267*G2);
+  L2 := SIN(RADIANS(J2))*(1.914602-G2*(0.004817+0.000014*G2))+SIN(RADIANS(2*J2))*(0.019993-0.000101*G2)+SIN(RADIANS(3*J2))*0.000289;
+  M2 := I2+L2;
+  P2 := M2-0.00569-0.00478*SIN(RADIANS(125.04-1934.136*G2));
+  Q2 := 23+(26+((21.448-G2*(46.815+G2*(0.00059-G2*0.001813))))/60)/60;
+  R2 := Q2+0.00256*COS(RADIANS(125.04-1934.136*G2));
+  T2 := DEGREES(ASIN(SIN(RADIANS(R2))*SIN(RADIANS(P2))));
+  U2 := TAN(RADIANS(R2/2))*TAN(RADIANS(R2/2));
+  V2 := 4*DEGREES(U2*SIN(2*RADIANS(I2))-2*K2*SIN(RADIANS(J2))+4*K2*U2*SIN(RADIANS(J2))*COS(2*RADIANS(I2))-0.5*U2*U2*SIN(4*RADIANS(I2))-1.25*K2*K2*SIN(2*RADIANS(J2)));
+  W2 := DEGREES(ACOS(COS(RADIANS(90.833))/(COS(RADIANS(B3))*COS(RADIANS(T2)))-TAN(RADIANS(B3))*TAN(RADIANS(T2))));
+  X2 := (720-4*B4-V2+B5*60)/1440;
+  Y2 := X2-W2*4/1440;
+  Z2 := X2+W2*4/1440;
+  Sunrise := Y2;
+  Sunset := Z2;
 end;
 
 const
